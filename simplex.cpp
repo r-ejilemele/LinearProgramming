@@ -18,7 +18,8 @@ public:
    * @param B The n x 1 constraint vector in the equation Ax <= b
    * @param C The m x 1 objective function coefficients in the equation c^Tx
    */
-  LP(MatrixXd &A, VectorXd &B, VectorXd &C, bool maxim) {
+  LP(const Eigen::Ref<const MatrixXd> &A, const Eigen::Ref<const MatrixXd> &B,
+     const Eigen::Ref<const MatrixXd> &C, bool maxim) {
     m_a = A;
     m_b = B;
     m_c = C;
@@ -26,7 +27,7 @@ public:
     int number_of_constrants = m_b.size();
     m_push_back(m_b, 0);
     MatrixXd stacked;
-    m_v_stack(m_a, (maxim ? 1:-1) * m_c.transpose(), stacked);
+    m_v_stack(m_a, (maxim ? 1 : -1) * m_c.transpose(), stacked);
     MatrixXd stacked2;
     m_h_stack(
         stacked,
@@ -35,6 +36,32 @@ public:
     m_h_stack(stacked2, m_b, m_table);
     m_num_variables = m_c.size();
   }
+
+  /**
+   * Creates an Instance of a Linear Program maximizer
+   * 
+   * Takes in rvalues for the Inputs
+   *
+   * @param A The n x m linear constraint matrix in the equation Ax <= b
+   * @param B The n x 1 constraint vector in the equation Ax <= b
+   * @param C The m x 1 objective function coefficients in the equation c^Tx
+   */
+  LP(MatrixXd &&A, VectorXd &&B, VectorXd &&C, bool maxim)
+      : m_a(std::move(A)), m_b(std::move(B)), m_c(std::move(C)) {
+    int number_of_constrants = m_b.size();
+    m_push_back(m_b, 0);
+    MatrixXd stacked;
+    m_v_stack(m_a, (maxim ? 1 : -1) * m_c.transpose(), stacked);
+    MatrixXd stacked2;
+    m_h_stack(
+        stacked,
+        MatrixXd::Identity(number_of_constrants + 1, number_of_constrants + 1),
+        stacked2);
+    m_h_stack(stacked2, m_b, m_table);
+    m_num_variables = m_c.size();
+  }
+
+  
   /**
    * @brief  an Instance of a Linear Program
    *
@@ -47,9 +74,10 @@ public:
         (m_table.row(m_table.rows() - 1).array() < 0).any();
     while (exists_negative_in_last_row) {
       Eigen::Index pivot_column = m_argmin(m_table.row(m_table.rows() - 1));
-      Eigen::Index pivot_row = m_argmin((m_table.col(m_table.cols() - 1).array() /
-                                       m_table.col(pivot_column).array())
-                                          .segment(0, m_table.rows() - 1));
+      Eigen::Index pivot_row =
+          m_argmin((m_table.col(m_table.cols() - 1).array() /
+                    m_table.col(pivot_column).array())
+                       .segment(0, m_table.rows() - 1));
 
       double pivot_elem = m_table(pivot_row, pivot_column);
       m_table.row(pivot_row) = m_table.row(pivot_row) / pivot_elem;
@@ -90,7 +118,7 @@ private:
     return;
   }
 
-  std::pair<bool, int> m_is_one_hot(const Eigen::VectorXd &v) {
+  std::pair<bool, int> m_is_one_hot(const Eigen::Ref<VectorXd> &v) {
 
     bool found = false;
     int index = 0;
@@ -129,8 +157,8 @@ private:
    *@param matrix2 the matrix that will be on the bottom
    *@param out the matrix that the output will be put into
    */
-  void m_v_stack(const MatrixXd &matrix1, const MatrixXd &matrix2,
-               MatrixXd &out) {
+  void m_v_stack(const Eigen::Ref<const MatrixXd> &matrix1,
+                 const Eigen::Ref<const MatrixXd> &matrix2, MatrixXd &out) {
 
     out.resize(matrix1.rows() + matrix2.rows(), matrix1.cols());
     out << matrix1, matrix2;
@@ -145,8 +173,8 @@ private:
    *@param matrix2 the matrix that will be on the right
    *@param out the matrix that the output will be put into
    */
-  void m_h_stack(const MatrixXd &matrix1, const MatrixXd &matrix2,
-               MatrixXd &out) {
+  void m_h_stack(const Eigen::Ref<const MatrixXd> &matrix1,
+                 const Eigen::Ref<const MatrixXd> &matrix2, MatrixXd &out) {
     out.resize(matrix1.rows(), matrix1.cols() + matrix2.cols());
     out << matrix1, matrix2;
     return;
@@ -179,7 +207,7 @@ int main() {
   A << 3, 2, 1, 2, 5, 3;
 
   VectorXd B(2, 1);
-  B << 10,15;
+  B << 10, 15;
   VectorXd C(3, 1);
   C << -2, -3, -4;
   LP linear(A, B, C, true);
