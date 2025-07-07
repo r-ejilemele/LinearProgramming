@@ -1,0 +1,11 @@
+1. Preliminary Pivoting for Negative RHS
+If any constraint row in the initial tableau has a negative RHS:
+
+Identify the pivot column:
+In the row with negative RHS, select any column with a negative entry (if none exists, the problem is infeasible).
+
+Select the pivot row:
+For the pivot column, compute the ratios of RHS to the pivot column entry for rows where the entry is positive. Choose the row with the smallest positive ratio.
+
+Perform the pivot operation:
+Update the tableau using Gaussian elimination to eliminate the negative RHS. Repeat until all RHS values are non-negative.
