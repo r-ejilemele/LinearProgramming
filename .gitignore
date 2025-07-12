@@ -1,2 +1,5 @@
 /build
 /.vscode
+/test
+/data
+linear.cp313-win_amd64.pyd
