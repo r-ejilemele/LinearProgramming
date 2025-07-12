@@ -111,11 +111,18 @@ def reformat_constraints(A, B, types):
 
 def load_numpy_file(file_path):
     """Load a NumPy file containing A, B, C, and types."""
-    data = np.load(file_path, allow_pickle=True).item()
-    A = data["A"]
-    B = data["B"]
-    C = data["C"]
-    types = data["types"]
+    A = None
+    B = None
+    C = None
+    types = None
+    with np.load(file_path) as data:
+        A = data["A"]
+        B = data["B"]
+        B = B.reshape(B.shape[0], 1)
+        C = data["C"]
+        C = C.reshape(C.shape[0], 1)
+        types = data["types"]
+
     return A, B, C, list(types)
 
 
@@ -135,7 +142,7 @@ def parse_mps_to_standard_form(mps_path):
 
 
 def load_linear_program(file_path):
-    if "nps" in file_path:
+    if "npz" in file_path:
         return load_numpy_file(file_path)
     elif "mps" in file_path:
         return parse_mps_to_standard_form(file_path)
@@ -146,47 +153,49 @@ def load_linear_program(file_path):
 
 
 if __name__ == "__main__":
-    A, B, C, types = load_linear_program(
-        r"C:\Users\rejil\Documents\GitHub\LinearProgramming\data\80bau3b.mps"
-    )
     # A, B, C, types = load_linear_program(
-    #     r"C:\Users\rejil\Documents\GitHub\LinearProgramming\data\afiro.mps"
+    #     r"C:\Users\rejil\Documents\GitHub\LinearProgramming\data\80bau3b.mps"
     # )
+    A, B, C, types = load_linear_program(
+        r"C:\Users\rejil\Documents\GitHub\LinearProgramming\test\numpy\sc50a.mps.npz"
+    )
+    # print(f"{A.shape=}, {B.shape=}, {C.shape=}, {types=}")
+
     print(LinearProgram(A, B, C, False, types).simplexSolver())
 
-    # parse_mps_pulp(r"C:\Users\rejil\Documents\GitHub\LinearProgramming\data\fit1d.mps")
+# parse_mps_pulp(r"C:\Users\rejil\Documents\GitHub\LinearProgramming\data\fit1d.mps")
 
-    # Usage:
-    # data_15th_col = find_15th_column(
-    #     r"C:\Users\rejil\Documents\GitHub\LinearProgramming\data\25fv47.mps"
-    # )
-    # print("15th Column Entries:", data_15th_col)
-    # A = np.array([[2, 1, 1], [1, 2, 3], [2, 2, 1]])
-    # B = np.array([[2], [4], [8]])
-    # C = np.array([[4], [1], [4]])
-    # types = ["L", "L", "L"]
-    # print(LinearProgram(A, B, C, True, types).simplexSolver())
+# Usage:
+# data_15th_col = find_15th_column(
+#     r"C:\Users\rejil\Documents\GitHub\LinearProgramming\data\25fv47.mps"
+# )
+# print("15th Column Entries:", data_15th_col)
+# A = np.array([[2, 1, 1], [1, 2, 3], [2, 2, 1]])
+# B = np.array([[2], [4], [8]])
+# C = np.array([[4], [1], [4]])
+# types = ["L", "L", "L"]
+# print(LinearProgram(A, B, C, True, types).simplexSolver())
 
-    # A = np.array(
-    #     [
-    #         [1, 1, 1],
-    #         [2, 1, 3],
-    #         [1, 2, 1],
-    #     ]
-    # )
-    # B = np.array(
-    #     [
-    #         [30],
-    #         [20],
-    #         [25],
-    #     ]
-    # )
-    # C = np.array(
-    #     [
-    #         [2],
-    #         [3],
-    #         [1],
-    #     ]
-    # )
-    # types = ["L", "G", "L"]
-    # print(LinearProgram(A, B, C, True, types).simplexSolver())
+# A = np.array(
+#     [
+#         [1, 1, 1],
+#         [2, 1, 3],
+#         [1, 2, 1],
+#     ]
+# )
+# B = np.array(
+#     [
+#         [30],
+#         [20],
+#         [25],
+#     ]
+# )
+# C = np.array(
+#     [
+#         [2],
+#         [3],
+#         [1],
+#     ]
+# )
+# types = ["L", "G", "L"]
+# print(LinearProgram(A, B, C, True, types).simplexSolver())

@@ -1,20 +1,11 @@
-#include <Eigen/Core>
-#include <Eigen/Dense>
-#include <algorithm>
-#include <chrono>
-#include <iostream>
-#include <limits>
-#include <pybind11/eigen.h>
-#include <pybind11/numpy.h>
-#include <pybind11/pybind11.h>
-#include <pybind11/stl.h>
-#include <string>
-#include <thread>
-#include <utility>
-#include <vector>
+#include "main.h"
 
-#define TOLERANCE 1e-15
+#define TOLERANCE 1e-170
 
+using HighPrecision = mpfr::mpreal;
+using MatrixXmp = Eigen::Matrix<HighPrecision, Eigen::Dynamic, Eigen::Dynamic>;
+using VectorXmp = Eigen::Matrix<mpfr::mpreal, Eigen::Dynamic, 1>;
+using ArrayXmp = Eigen::Array<mpfr::mpreal, Eigen::Dynamic, 1>;
 using Eigen::placeholders::last;
 namespace py = pybind11;
 
@@ -22,15 +13,37 @@ float some_fn(float arg1, float arg2) { return arg1 + arg2; }
 
 template <typename T>
 std::ostream &operator<<(std::ostream &os, const std::vector<T> &v) {
-  os << "["; // Start with an opening bracket
+  os << "[";
   for (size_t i = 0; i < v.size(); ++i) {
-    os << v[i]; // Print each element
+    os << v[i];
     if (i != v.size() - 1) {
-      os << ", "; // Add a comma and space between elements
+      os << ", ";
     }
   }
-  os << "]"; // End with a closing bracket
-  return os; // Return the ostream reference
+  os << "]";
+  return os;
+}
+
+// Convert 2D numpy array of doubles to Eigen::Matrix<mpreal, ...>
+MatrixXmp numpy_to_mpreal_matrix(py::array_t<double> input) {
+  auto buf = input.unchecked<2>(); // 2D access
+  MatrixXmp result(buf.shape(0), buf.shape(1));
+  for (pybind11::ssize_t i = 0; i < buf.shape(0); i++) {
+    for (pybind11::ssize_t j = 0; j < buf.shape(1); j++) {
+      result(i, j) = buf(i, j);
+    }
+  }
+  return result;
+}
+
+// Convert 1D numpy array of doubles to Eigen::Matrix<mpreal, Dynamic, 1>
+VectorXmp numpy_to_mpreal_vector(py::array_t<double> input) {
+  auto buf = input.unchecked<1>(); // 1D access
+  VectorXmp result(buf.shape(0));
+  for (pybind11::ssize_t i = 0; i < buf.shape(0); i++) {
+    result(i) = buf(i);
+  }
+  return result;
 }
 
 class LP {
@@ -44,7 +57,7 @@ public:
    * @param C The m x 1 objective function coefficients in the equation c^Tx
    * @param maxim is True if this is a maximization problem otherwise it's False
    */
-  LP(Eigen::MatrixXd A, Eigen::MatrixXd B, Eigen::MatrixXd C, bool maxim,
+  LP(MatrixXmp A, MatrixXmp B, MatrixXmp C, bool maxim,
      std::vector<std::string> constraint) {
     m_a = A;
     m_La.resize(A.rows(), A.cols());
@@ -161,6 +174,20 @@ public:
   //   m_h_stack(stacked2, m_b, m_table);
   //   m_num_variables = m_c.size();
   // }
+  Eigen::VectorXd simplexSolverDouble() {
+    VectorXmp result_mp =
+        simplexSolver(); // original function returning VectorXmp
+
+    // Create a double VectorXd of the same size
+    Eigen::VectorXd result_double(result_mp.size());
+
+    // Convert each element from mpfr::mpreal to double
+    for (int i = 0; i < result_mp.size(); ++i) {
+      result_double[i] =
+          result_mp[i].toDouble(); // or static_cast<double>(result_mp[i])
+    }
+    return result_double;
+  }
 
   /**
    * @brief  an Instance of a Linear Program
@@ -169,7 +196,7 @@ public:
    * @returns the feasible solution this Linear Program using the Simplex
    * algorithm
    */
-  Eigen::VectorXd simplexSolver() {
+  VectorXmp simplexSolver() {
     phaseOneSimplexSolver();
     // std::cout << "Basis: " << std::endl << m_basis << std::endl;
     // std::cout << "Table: \n" << m_table << std::endl;
@@ -207,7 +234,7 @@ public:
               << std::endl
               << m_table(m_table.rows() - 1, m_table.cols() - 1) << std::endl
               << std::endl;
-    Eigen::VectorXd output(m_num_variables, 1);
+    VectorXmp output(m_num_variables, 1);
     for (int i = 0; i < m_num_variables; i++) {
       auto [hot, index] = m_is_one_hot(m_table.col(i));
 
@@ -227,15 +254,15 @@ public:
   }
 
 private:
-  Eigen::MatrixXd m_a;
-  Eigen::MatrixXd m_La;
-  Eigen::VectorXd m_b;
-  Eigen::VectorXd m_Lb;
-  Eigen::MatrixXd m_c;
-  Eigen::MatrixXd m_table;
-  Eigen::MatrixXd m_phase_one_table;
+  MatrixXmp m_a;
+  MatrixXmp m_La;
+  VectorXmp m_b;
+  VectorXmp m_Lb;
+  MatrixXmp m_c;
+  MatrixXmp m_table;
+  MatrixXmp m_phase_one_table;
   std::vector<int> m_basis;
-  Eigen::VectorXd m_objective;
+  VectorXmp m_objective;
   int64_t m_num_artificial;
   std::vector<std::string> types;
   int m_num_variables;
@@ -246,7 +273,7 @@ private:
     m_push_back(m_b, 0);
 
     // Stack phase 1 objective function below constraint vector
-    Eigen::MatrixXd stacked;
+    MatrixXmp stacked;
     // stacked.resize(m_a.rows() + m_c.cols(), m_a.cols());
     m_v_stack(
         m_a, m_make_vector_with_one_non_zero_elem(0, 0, m_a.cols()).transpose(),
@@ -262,7 +289,7 @@ private:
     m_objective(m_objective.size() - 2) = 1;
     // std::cout << "Objective: \n" << m_objective << std::endl;
     //  Add slack variables
-    Eigen::MatrixXd stacked2 = stacked;
+    MatrixXmp stacked2 = stacked;
     auto height = stacked2.rows();
     std::vector<int64_t> greater_than_rows;
 
@@ -308,7 +335,7 @@ private:
     // std::cout << "Done stacking the two:" << std::endl;
     for (auto i = 0; i < m_basis.size(); ++i) {
       auto col = m_basis[i];
-      Eigen::VectorXd col_copy = m_phase_one_table.col(col);
+      VectorXmp col_copy = m_phase_one_table.col(col);
 
       col_copy(i) = 0;
       if ((col_copy.array() != 0).any()) {
@@ -413,18 +440,18 @@ private:
     //           << m_phase_one_table << std::endl
     //           << std::endl;
     auto temp8 = m_phase_one_table.cols() - 1;
-    Eigen::VectorXd rhs =
+    VectorXmp rhs =
         m_phase_one_table(Eigen::seq(0, Eigen::placeholders::last - 1),
                           Eigen::placeholders::last);
-    Eigen::MatrixXd temp = m_phase_one_table(
+    MatrixXmp temp = m_phase_one_table(
         Eigen::seq(0, Eigen::placeholders::last - 1),
         Eigen::seq(0, Eigen::placeholders::last - (m_num_artificial + 1)));
     auto vec = m_make_vector_with_one_non_zero_elem(0, 0, temp.rows());
-    Eigen::MatrixXd temp2;
+    MatrixXmp temp2;
     m_h_stack(temp, vec, temp2);
     // std::cout << "stacked the vector of zeros" << std::endl;
 
-    m_h_stack(temp2, static_cast<Eigen::MatrixXd>(rhs), temp);
+    m_h_stack(temp2, static_cast<MatrixXmp>(rhs), temp);
     // std::cout << "stacked the B" << std::endl;
     // std::cout << "Objective Size: " << m_objective.size() << std::endl;
     m_v_stack(temp, m_objective.transpose(), m_table);
@@ -442,7 +469,7 @@ private:
 
     for (auto i = 0; i < m_basis.size(); ++i) {
       auto col = m_basis[i];
-      Eigen::VectorXd col_copy = m_table.col(col);
+      VectorXmp col_copy = m_table.col(col);
 
       col_copy(i) = 0;
       if ((col_copy.array() != 0).any()) {
@@ -460,18 +487,17 @@ private:
     //           << std::endl;
   }
 
-  Eigen::VectorXd m_make_vector_with_one_non_zero_elem(Eigen::Index position,
-                                                       double value,
-                                                       int64_t size) {
-    Eigen::VectorXd vec = Eigen::VectorXd::Zero(size);
+  VectorXmp m_make_vector_with_one_non_zero_elem(Eigen::Index position,
+                                                 double value, int64_t size) {
+    VectorXmp vec = VectorXmp::Zero(size);
     // std::cout << "Before: " << position << ", " << size << std::endl;
     vec(position) = value;
     // std::cout << "After here" << std::endl;
     return vec;
   }
 
-  bool m_check_assignment_is_valid(Eigen::Ref<Eigen::MatrixXd> table) {
-    Eigen::VectorXd output(m_num_variables, 1);
+  bool m_check_assignment_is_valid(Eigen::Ref<MatrixXmp> table) {
+    VectorXmp output(m_num_variables, 1);
     output.setZero();
     for (int i = 0; i < m_num_variables; i++) {
       auto [hot, index] = m_is_one_hot(table.col(i));
@@ -505,7 +531,7 @@ private:
   }
 
   void m_pivot(Eigen::Index pivot_row, Eigen::Index pivot_column,
-               Eigen::Ref<Eigen::MatrixXd> table) {
+               Eigen::Ref<MatrixXmp> table) {
     // std::cout << "Dimensions position: (" << m_table.rows() << ", "
     //           << m_table.cols() << ")" << std::endl;
     //  std::cout << "Pivot position: (" << pivot_row << ", " << pivot_column <<
@@ -522,11 +548,11 @@ private:
   }
 
   void m_elimination(Eigen::Index pivot_row, Eigen::Index pivot_column,
-                     Eigen::Ref<Eigen::MatrixXd> table) {
+                     Eigen::Ref<MatrixXmp> table) {
     for (int i = 0; i < table.rows(); i++) {
       if (i != pivot_row) {
 
-        double factor = table(i, pivot_column);
+        mpfr::mpreal factor = table(i, pivot_column);
         if (factor != 0)
           table.row(i) -= factor * table.row(pivot_row);
       }
@@ -534,7 +560,7 @@ private:
     return;
   }
 
-  std::pair<bool, int> m_is_one_hot(const Eigen::Ref<Eigen::VectorXd> v) {
+  std::pair<bool, int> m_is_one_hot(const Eigen::Ref<VectorXmp> v) {
 
     bool found = false;
     int index = 0;
@@ -558,7 +584,7 @@ private:
    *
    *
    */
-  void m_push_back(Eigen::VectorXd &vec, double value) {
+  void m_push_back(VectorXmp &vec, double value) {
     auto n = vec.size();
     vec.conservativeResize(vec.size() + 1);
     // vec.conservativeResize(n + 1);
@@ -574,8 +600,7 @@ private:
    *@param matrix2 the matrix that will be on the bottom
    *@param out the matrix that the output will be put into
    */
-  void m_v_stack(Eigen::MatrixXd matrix1, Eigen::MatrixXd matrix2,
-                 Eigen::MatrixXd &out) {
+  void m_v_stack(MatrixXmp matrix1, MatrixXmp matrix2, MatrixXmp &out) {
     out.resize(matrix1.rows() + matrix2.rows(), matrix1.cols());
     out << matrix1, matrix2;
     return;
@@ -589,8 +614,7 @@ private:
    *@param matrix2 the matrix that will be on the right
    *@param out the matrix that the output will be put into
    */
-  void m_h_stack(Eigen::MatrixXd matrix1, Eigen::MatrixXd matrix2,
-                 Eigen::MatrixXd &out) {
+  void m_h_stack(MatrixXmp matrix1, MatrixXmp matrix2, MatrixXmp &out) {
     // std::cout << "HELLO" << std::endl;
     // std::cout << "HELLO2" << std::endl;
     out.resize(matrix1.rows(), matrix1.cols() + matrix2.cols());
@@ -598,12 +622,12 @@ private:
     return;
   }
 
-  int m_argmin(const Eigen::VectorXd v) {
+  int m_argmin(const VectorXmp v) {
 
     return std::distance(v.data(),
                          std::min_element(v.data(), v.data() + v.size()));
   }
-  int m_find_pivot_column(const Eigen::VectorXd v) {
+  int m_find_pivot_column(const VectorXmp v) {
     for (int j = 0; j < v.size() - 1; ++j) {
       if (v(j) < -TOLERANCE) {
         return j;
@@ -614,8 +638,8 @@ private:
     return -1;
   }
   int m_find_pivot_row(const Eigen::Index pivot_column,
-                       Eigen::Ref<Eigen::MatrixXd> table) {
-    // std::cout << "Entering from finding pivot row" << std::endl;
+                       Eigen::Ref<MatrixXmp> table) {
+    std::cout << "Entering from finding pivot row" << std::endl;
 
     // std::cout << "Inside Pivot Row: " << std::endl;
     auto rhs = table.col(table.cols() - 1).array();
@@ -630,16 +654,16 @@ private:
     // std::cout << "Inside Pivot Row3: " << std::endl;
     // std::cout << "RHS: " << std::endl << rhs << std::endl << std::endl;
     Eigen::Index n = table.rows() - 1;
-    Eigen::ArrayXd ratio =
+    ArrayXmp ratio =
         (col > 0).select(rhs / col, std::numeric_limits<double>::infinity());
 
     // std::cout << "After finding the ratios" << std::endl;
-    Eigen::VectorXd ratio_segment = ratio.segment(0, n);
+    VectorXmp ratio_segment = ratio.segment(0, n);
     // std::cout << "Ratio Segment1: \n" << ratio_segment << std::endl;
-    ratio_segment =
-        (ratio_segment.array() > -TOLERANCE)
-            .select(ratio_segment, std::numeric_limits<double>::infinity());
-    double min_ratio = ratio_segment.minCoeff();
+    ratio_segment = (ratio_segment.array() > -TOLERANCE)
+                        .select(ratio_segment,
+                                std::numeric_limits<mpfr::mpreal>::infinity());
+    mpfr::mpreal min_ratio = ratio_segment.minCoeff();
     // std::cout << "Ratio : " << std::endl << ratio_segment << std::endl;
     // for (int i = 0; i < n; ++i) {
     //   if (col(i) > 0) {
@@ -654,7 +678,7 @@ private:
     std::vector<int> candidate_rows;
     for (int i = 0; i < ratio_segment.size(); ++i) {
       // std::cout << "Ratio Segment: " << ratio_segment(i) << std::endl;
-      if (std::abs(ratio_segment(i) - min_ratio) < TOLERANCE) {
+      if ((mpfr::abs(ratio_segment(i)) - min_ratio) < TOLERANCE) {
         candidate_rows.push_back(i);
       }
     }
@@ -663,7 +687,7 @@ private:
     // std::cout << "After finding candidate : " << candidate_rows.size()
     //           << std::endl;
     // std::cout << "Basis: " << std::endl << m_basis << std::endl;
-    double min_index = std::numeric_limits<double>::max();
+    mpfr::mpreal min_index = std::numeric_limits<mpfr::mpreal>::max();
     int leaving_row = -1;
     // std::cout << "After finding basis size: " << std::endl
     //           << m_basis << std::endl;
@@ -679,14 +703,35 @@ private:
       }
     }
     // std::cout << "Returning from finding pivot row" << std::endl;
+    // int best_idx = -1;
+    // mpfr::mpreal best_val = -std::numeric_limits<mpfr::mpreal>::infinity();
+    // col = col.abs();
+    // for (int i = 0; i < ratio_segment.size(); ++i) {
+    //   if (ratio_segment(i) > -TOLERANCE && col(i) > best_val) {
+    //     best_val = col(i);
+    //     best_idx = i;
+    //   }
+    // }
+    // std::swap(m_basis[leaving_row], m_basis[best_idx]);
+    // table.row(leaving_row).swap(table.row(best_idx));
+    // m_La.row(leaving_row).swap(m_La.row(best_idx));
+    // m_Lb.row(leaving_row).swap(m_Lb.row(best_idx));
     return leaving_row;
   }
 };
 
 PYBIND11_MODULE(linear, handle) {
+  mpfr::mpreal::set_default_prec(256);
   handle.doc() = "This is the doc";
   py::class_<LP>(handle, "LinearProgram")
-      .def(py::init<Eigen::MatrixXd, Eigen::VectorXd, Eigen::MatrixXd, bool,
-                    std::vector<std::string>>())
-      .def("simplexSolver", &LP::simplexSolver);
+      .def(py::init([](py::array_t<double> A_np, py::array_t<double> b_np,
+                       py::array_t<double> C_np, bool flag,
+                       std::vector<std::string> names) {
+        MatrixXmp A = numpy_to_mpreal_matrix(A_np);
+        VectorXmp b = numpy_to_mpreal_matrix(b_np);
+        MatrixXmp C = numpy_to_mpreal_matrix(C_np);
+
+        return std::make_unique<LP>(A, b, C, flag, names);
+      }))
+      .def("simplexSolver", &LP::simplexSolverDouble);
 }
