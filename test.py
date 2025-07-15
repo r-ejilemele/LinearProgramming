@@ -138,6 +138,8 @@ def parse_mps_to_standard_form(mps_path):
         C=C,
         types=np.array(types, dtype="<U10"),
     )
+    B = B.reshape(B.shape[0], 1)
+    C = C.reshape(C.shape[0], 1)
     return A, B, C, types
 
 
@@ -154,10 +156,10 @@ def load_linear_program(file_path):
 
 if __name__ == "__main__":
     # A, B, C, types = load_linear_program(
-    #     r"C:\Users\rejil\Documents\GitHub\LinearProgramming\data\80bau3b.mps"
+    #     r"C:\Users\rejil\Documents\GitHub\LinearProgramming\data\fit1d.mps"
     # )
     A, B, C, types = load_linear_program(
-        r"C:\Users\rejil\Documents\GitHub\LinearProgramming\test\numpy\sc50a.mps.npz"
+        r"C:\Users\rejil\Documents\GitHub\LinearProgramming\test\numpy\afiro.mps.npz"
     )
     # print(f"{A.shape=}, {B.shape=}, {C.shape=}, {types=}")
 

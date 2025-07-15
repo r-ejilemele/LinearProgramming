@@ -59,19 +59,35 @@ public:
    */
   LP(MatrixXmp A, MatrixXmp B, MatrixXmp C, bool maxim,
      std::vector<std::string> constraint) {
+    m_permutation_matrix = MatrixXmp::Identity(A.rows() + 1, A.rows() + 1);
     m_a = A;
     m_La.resize(A.rows(), A.cols());
     m_b = B;
     m_Lb.resize(B.rows(), B.cols());
     m_c = (maxim ? -1 : 1) * C;
     types = constraint;
+    VectorXmp rowMax = m_a.rowwise().maxCoeff();
+    rowMax = rowMax.unaryExpr([](const mpfr::mpreal &x) {
+      if (x == 0)
+        return mpfr::mpreal(1);
+      if (x > 1e3 || x < 1e-3) {
+        double log10_val = std::log10(x.toDouble());
+        double rounded = std::round(log10_val);
+        return mpfr::pow(mpfr::mpreal(10.0), rounded);
+      }
+      return mpfr::mpreal(1);
+    });
+    Eigen::DiagonalMatrix<mpfr::mpreal, Eigen::Dynamic> rowMaxDiag(rowMax);
+    rowMaxDiag = rowMaxDiag.inverse();
+    MatrixXmp a = rowMaxDiag * m_a;
+    MatrixXmp b = rowMaxDiag * m_b;
     for (auto i = 0; i < A.rows(); ++i) {
       if (constraint[i] == "G") {
-        m_Lb(i) = -m_b(i);
-        m_La.row(i) = -m_a.row(i);
+        m_Lb(i) = -b(i);
+        m_La.row(i) = -a.row(i);
       } else {
-        m_Lb(i) = m_b(i);
-        m_La.row(i) = m_a.row(i);
+        m_Lb(i) = b(i);
+        m_La.row(i) = a.row(i);
       }
     }
     // Eigen::VectorXd rowNorms = m_a.rowwise().norm();
@@ -102,11 +118,7 @@ public:
     // std::cout << "rowNormsMat shape: (" << rowNormsMat.rows() << ", "
     //           << rowNormsMat.cols() << ")" << std::endl;
     // m_a = m_a.array() / rowNormsMat.array() / colNormsMat.array();
-    // Eigen::VectorXd rowMax = m_a.rowwise().maxCoeff();
-    // Eigen::DiagonalMatrix<double, Eigen::Dynamic> rowMaxDiag(rowMax);
-    // rowMaxDiag = rowMaxDiag.inverse();
-    // m_a = rowMaxDiag * m_a;
-    // m_b = rowMaxDiag * m_b;
+
     // for (int i = 0; i < m_a.rows(); i++) {
     //   auto rowMax = A.row(i).cwiseAbs().maxCoeff();
     //   if (rowMax > 0) {
@@ -206,12 +218,12 @@ public:
          -TOLERANCE)
             .any();
     int counter = 0;
+    std::cout << "Table: \n" << m_table << std::endl;
     while (exists_negative_in_last_row) {
       std::cout << std::endl
                 << "Phase 2: "
                 << m_table(m_table.rows() - 1, m_table.cols() - 1) << std::endl;
-      // std::cout << "Table: \n" << m_table << std::endl;
-      //  std::cout << "Table: \n" << m_table << std::endl;
+      //   std::cout << "Table: \n" << m_table << std::endl;
       Eigen::Index pivot_column =
           m_find_pivot_column(m_table.row(m_table.rows() - 1));
       // std::cout << "After pivot Column" << std::endl;
@@ -229,11 +241,21 @@ public:
               .any();
       counter++;
     }
+    // std::cout << "Final Table: \n" << m_table << std::endl;
 
     std::cout << std::endl
               << std::endl
               << m_table(m_table.rows() - 1, m_table.cols() - 1) << std::endl
               << std::endl;
+    m_table = m_permutation_matrix.transpose() * m_table;
+    m_La = m_permutation_matrix(Eigen::seq(0, Eigen::placeholders::last - 1),
+                                Eigen::seq(0, Eigen::placeholders::last - 1))
+               .transpose() *
+           m_La;
+    m_Lb = m_permutation_matrix(Eigen::seq(0, Eigen::placeholders::last - 1),
+                                Eigen::seq(0, Eigen::placeholders::last - 1))
+               .transpose() *
+           m_Lb;
     VectorXmp output(m_num_variables, 1);
     for (int i = 0; i < m_num_variables; i++) {
       auto [hot, index] = m_is_one_hot(m_table.col(i));
@@ -250,6 +272,15 @@ public:
     // std::cout << "AFTER PHASE TWO ASSIGNMENT VALID:"
     //           << m_check_assignment_is_valid(m_table) << std::endl
     //           << std::endl;
+    // std::cout << "permutation shape: (" << m_permutation_matrix.rows() << ",
+    // "
+    //           << m_permutation_matrix.cols() << ")" << std::endl;
+    // std::cout << "output shape: (" << output.rows() << ", " << output.cols()
+    //           << ")" << std::endl;
+    // std::cout << "c shape: (" << m_c.rows() << ", " << m_c.cols() << ")"
+    //           << std::endl;
+    std::cout << "FINAL RESULT: " << m_c.transpose() * output << std::endl;
+    refine_solution();
     return output;
   }
 
@@ -261,6 +292,7 @@ private:
   MatrixXmp m_c;
   MatrixXmp m_table;
   MatrixXmp m_phase_one_table;
+  MatrixXmp m_permutation_matrix;
   std::vector<int> m_basis;
   VectorXmp m_objective;
   int64_t m_num_artificial;
@@ -486,7 +518,50 @@ private:
     //           << m_check_assignment_is_valid(m_table) << std::endl
     //           << std::endl;
   }
+  void refine_solution() {
+    int size = m_a.rows() + m_a.cols();
+    MatrixXmp A = m_a;
+    std::cout << "m_La shape: (" << m_La.rows() << ", " << m_La.cols() << ")"
+              << std::endl;
+    std::cout << "A rows: " << A.rows() << std::endl;
+    VectorXmp b = m_b(Eigen::seq(0, Eigen::placeholders::last - 1), Eigen::all);
+    VectorXmp z(size, 1);
+    for (int i = 0; i < size; i++) {
+      auto [hot, index] = m_is_one_hot(m_table.col(i));
 
+      if (hot) {
+        z(i) = m_table(index, m_table.cols() - 1);
+      } else {
+        z(i) = 0;
+      }
+    }
+    VectorXmp x = z.head(m_num_variables);
+    VectorXmp s = z.tail(m_a.rows());
+
+    std::cout << "b shape: (" << b.rows() << ", " << b.cols() << ")"
+              << std::endl;
+    std::cout << "A shape: (" << A.rows() << ", " << A.cols() << ")"
+              << std::endl;
+    std::cout << "x shape: (" << x.rows() << ", " << x.cols() << ")"
+              << std::endl;
+    std::cout << "s shape: (" << s.rows() << ", " << s.cols() << ")"
+              << std::endl;
+    MatrixXmp residual = b - A * x - s;
+
+    std::cout << "Residual norm: " << residual.norm() << std::endl;
+    std::cout << "Residual norm: \n" << residual << std::endl;
+    while (residual.norm() > 1e-72) {
+      std::cout << "Residual norm: " << residual.norm() << std::endl;
+      MatrixXmp c = A.colPivHouseholderQr().solve(residual);
+      x = x + c;
+      s = b - A * x;
+      x.cwiseMax(-TOLERANCE);
+      s.cwiseMax(-TOLERANCE);
+      residual = b - A * x - s;
+      std::cout << "Residual norm: " << residual.norm() << std::endl;
+    }
+    std::cout << "REFINED OUTPUT:" << m_c.transpose() * x << std::endl;
+  }
   VectorXmp m_make_vector_with_one_non_zero_elem(Eigen::Index position,
                                                  double value, int64_t size) {
     VectorXmp vec = VectorXmp::Zero(size);
@@ -650,12 +725,13 @@ private:
     // std::cout << "m_table shape: (" << m_table.rows() << ", " <<
     // m_table.cols()
     //           << ")" << std::endl;
-    auto col = table.col(pivot_column).array();
+    ArrayXmp col = table.col(pivot_column).array();
     // std::cout << "Inside Pivot Row3: " << std::endl;
     // std::cout << "RHS: " << std::endl << rhs << std::endl << std::endl;
     Eigen::Index n = table.rows() - 1;
     ArrayXmp ratio =
-        (col > 0).select(rhs / col, std::numeric_limits<double>::infinity());
+        (col > -TOLERANCE)
+            .select(rhs / col, std::numeric_limits<double>::infinity());
 
     // std::cout << "After finding the ratios" << std::endl;
     VectorXmp ratio_segment = ratio.segment(0, n);
@@ -702,21 +778,24 @@ private:
         leaving_row = row;
       }
     }
-    // std::cout << "Returning from finding pivot row" << std::endl;
-    // int best_idx = -1;
-    // mpfr::mpreal best_val = -std::numeric_limits<mpfr::mpreal>::infinity();
-    // col = col.abs();
-    // for (int i = 0; i < ratio_segment.size(); ++i) {
-    //   if (ratio_segment(i) > -TOLERANCE && col(i) > best_val) {
-    //     best_val = col(i);
-    //     best_idx = i;
-    //   }
-    // }
-    // std::swap(m_basis[leaving_row], m_basis[best_idx]);
-    // table.row(leaving_row).swap(table.row(best_idx));
-    // m_La.row(leaving_row).swap(m_La.row(best_idx));
-    // m_Lb.row(leaving_row).swap(m_Lb.row(best_idx));
-    return leaving_row;
+    std::cout << "Returning from finding pivot row" << std::endl;
+    int best_idx = leaving_row;
+    col = col.abs();
+    mpfr::mpreal best_val = col(leaving_row);
+    for (int i = leaving_row; i < ratio_segment.size(); ++i) {
+      if (ratio_segment(i) > -TOLERANCE && col(i) > best_val) {
+        best_val = col(i);
+        best_idx = i;
+      }
+    }
+    std::swap(m_basis[leaving_row], m_basis[best_idx]);
+    table.row(leaving_row).swap(table.row(best_idx));
+    m_La.row(leaving_row).swap(m_La.row(best_idx));
+    m_Lb.row(leaving_row).swap(m_Lb.row(best_idx));
+    m_permutation_matrix.row(leaving_row)
+        .swap(m_permutation_matrix.row(best_idx));
+    return best_idx;
+    // return leaving_row;
   }
 };
 
