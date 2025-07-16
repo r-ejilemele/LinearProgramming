@@ -56,13 +56,18 @@ public:
    * @param B The n x 1 constraint vector in the equation Ax <= b
    * @param C The m x 1 objective function coefficients in the equation c^Tx
    * @param maxim is True if this is a maximization problem otherwise it's False
+   * @param constraint Holds whether a constraint is greater than or less than
    */
   LP(MatrixXmp A, MatrixXmp B, MatrixXmp C, bool maxim,
      std::vector<std::string> constraint) {
+    m_constraints = constraint;
     m_permutation_matrix = MatrixXmp::Identity(A.rows() + 1, A.rows() + 1);
     m_a = A;
+    m_Ca = A;
     m_La.resize(A.rows(), A.cols());
     m_b = B;
+    m_Cb = B;
+    m_Cb.resize(B.rows(), B.cols());
     m_Lb.resize(B.rows(), B.cols());
     m_c = (maxim ? -1 : 1) * C;
     types = constraint;
@@ -84,7 +89,9 @@ public:
     for (auto i = 0; i < A.rows(); ++i) {
       if (constraint[i] == "G") {
         m_Lb(i) = -b(i);
+        // m_Cb(i) = -b(i);
         m_La.row(i) = -a.row(i);
+        // m_Ca.row(i) = -a.row(i);
       } else {
         m_Lb(i) = b(i);
         m_La.row(i) = a.row(i);
@@ -280,15 +287,18 @@ public:
     // std::cout << "c shape: (" << m_c.rows() << ", " << m_c.cols() << ")"
     //           << std::endl;
     std::cout << "FINAL RESULT: " << m_c.transpose() * output << std::endl;
-    refine_solution();
+    // refine_solution();
     return output;
   }
 
 private:
+  std::vector<std::string> m_constraints;
   MatrixXmp m_a;
   MatrixXmp m_La;
+  MatrixXmp m_Ca;
   VectorXmp m_b;
   VectorXmp m_Lb;
+  VectorXmp m_Cb;
   MatrixXmp m_c;
   MatrixXmp m_table;
   MatrixXmp m_phase_one_table;
@@ -520,11 +530,20 @@ private:
   }
   void refine_solution() {
     int size = m_a.rows() + m_a.cols();
-    MatrixXmp A = m_a;
-    std::cout << "m_La shape: (" << m_La.rows() << ", " << m_La.cols() << ")"
-              << std::endl;
-    std::cout << "A rows: " << A.rows() << std::endl;
-    VectorXmp b = m_b(Eigen::seq(0, Eigen::placeholders::last - 1), Eigen::all);
+    MatrixXmp temp = m_Ca;
+    MatrixXmp Identity = MatrixXmp::Identity(m_Ca.rows(), m_Ca.rows());
+    MatrixXmp A = m_Ca;
+    m_h_stack(temp, Identity, A);
+    // std::cout << "m_La shape: (" << m_La.rows() << ", " << m_La.cols() << ")"
+    //           << std::endl;
+    // std::cout << "A rows: " << A.rows() << std::endl;
+
+    VectorXmp b = m_Cb;
+    for (int i = 0; i < m_constraints.size(); i++) {
+      if (m_constraints[i] == "G") {
+        A.col(m_Ca.cols() + i) = -A.col(m_Ca.cols() + i);
+      }
+    }
     VectorXmp z(size, 1);
     for (int i = 0; i < size; i++) {
       auto [hot, index] = m_is_one_hot(m_table.col(i));
@@ -535,32 +554,31 @@ private:
         z(i) = 0;
       }
     }
-    VectorXmp x = z.head(m_num_variables);
-    VectorXmp s = z.tail(m_a.rows());
+    // VectorXmp x = z.head(m_num_variables);
+    // VectorXmp s = z.tail(m_a.rows());
 
     std::cout << "b shape: (" << b.rows() << ", " << b.cols() << ")"
               << std::endl;
     std::cout << "A shape: (" << A.rows() << ", " << A.cols() << ")"
               << std::endl;
-    std::cout << "x shape: (" << x.rows() << ", " << x.cols() << ")"
+    std::cout << "z shape: (" << z.rows() << ", " << z.cols() << ")"
               << std::endl;
-    std::cout << "s shape: (" << s.rows() << ", " << s.cols() << ")"
-              << std::endl;
-    MatrixXmp residual = b - A * x - s;
+    // std::cout << "s shape: (" << s.rows() << ", " << s.cols() << ")"
+    //           << std::endl;
+    MatrixXmp residual = b - A * z;
 
     std::cout << "Residual norm: " << residual.norm() << std::endl;
     std::cout << "Residual norm: \n" << residual << std::endl;
-    while (residual.norm() > 1e-72) {
+    while (residual.norm() > 1e1) {
       std::cout << "Residual norm: " << residual.norm() << std::endl;
       MatrixXmp c = A.colPivHouseholderQr().solve(residual);
-      x = x + c;
-      s = b - A * x;
-      x.cwiseMax(-TOLERANCE);
-      s.cwiseMax(-TOLERANCE);
-      residual = b - A * x - s;
+      z += c;
+      // z.cwiseMax(-TOLERANCE);
+      residual = b - A * z;
       std::cout << "Residual norm: " << residual.norm() << std::endl;
     }
-    std::cout << "REFINED OUTPUT:" << m_c.transpose() * x << std::endl;
+    std::cout << "REFINED OUTPUT:" << m_c.transpose() * z.head(m_num_variables)
+              << std::endl;
   }
   VectorXmp m_make_vector_with_one_non_zero_elem(Eigen::Index position,
                                                  double value, int64_t size) {
@@ -800,7 +818,7 @@ private:
 };
 
 PYBIND11_MODULE(linear, handle) {
-  mpfr::mpreal::set_default_prec(256);
+  mpfr::mpreal::set_default_prec(128);
   handle.doc() = "This is the doc";
   py::class_<LP>(handle, "LinearProgram")
       .def(py::init([](py::array_t<double> A_np, py::array_t<double> b_np,
