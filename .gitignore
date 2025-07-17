@@ -1,6 +1,7 @@
 /build
 /.vscode
-/test
+/tests
 /data
 out.txt
 linear.cp313-win_amd64.pyd
+/__pycache__

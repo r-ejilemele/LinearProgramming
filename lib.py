@@ -6,14 +6,8 @@ from highspy import Highs
 import highspy
 import sys
 
-np.set_printoptions(
-    threshold=sys.maxsize,
-    precision=15,  # Show 15 decimal places
-    suppress=False,  # Never use fixed-point notation
-    floatmode="maxprec",  # Use maximum precision for unique values
-    linewidth=200,
-)
 save_dir = "test/numpy"
+__all__ = ["load_linear_program"]
 
 
 def parse_mps_pulp(file_path):
@@ -51,11 +45,6 @@ def parse_mps_pulp(file_path):
         C[vars[str(var)]] = val
 
     A, B, types = reformat_constraints(A, B, types)
-    # # Now A, B, C, types are ready
-    # print("A:", A.shape)
-    # print("B:", B.shape)
-    # print("C:", C.shape)
-    # print("types:", types)
     return A, B, C, types
 
 
@@ -152,52 +141,3 @@ def load_linear_program(file_path):
         raise ValueError(
             "Unsupported file format. Only .mps and .nps files are supported."
         )
-
-
-if __name__ == "__main__":
-    # A, B, C, types = load_linear_program(
-    #     r"C:\Users\rejil\Documents\GitHub\LinearProgramming\data\fit1d.mps"
-    # )
-    A, B, C, types = load_linear_program(
-        r"C:\Users\rejil\Documents\GitHub\LinearProgramming\test\numpy\afiro.mps.npz"
-    )
-    # print(f"{A.shape=}, {B.shape=}, {C.shape=}, {types=}")
-
-    print(LinearProgram(A, B, C, False, types).simplexSolver())
-
-# parse_mps_pulp(r"C:\Users\rejil\Documents\GitHub\LinearProgramming\data\fit1d.mps")
-
-# Usage:
-# data_15th_col = find_15th_column(
-#     r"C:\Users\rejil\Documents\GitHub\LinearProgramming\data\25fv47.mps"
-# )
-# print("15th Column Entries:", data_15th_col)
-# A = np.array([[2, 1, 1], [1, 2, 3], [2, 2, 1]])
-# B = np.array([[2], [4], [8]])
-# C = np.array([[4], [1], [4]])
-# types = ["L", "L", "L"]
-# print(LinearProgram(A, B, C, True, types).simplexSolver())
-
-# A = np.array(
-#     [
-#         [1, 1, 1],
-#         [2, 1, 3],
-#         [1, 2, 1],
-#     ]
-# )
-# B = np.array(
-#     [
-#         [30],
-#         [20],
-#         [25],
-#     ]
-# )
-# C = np.array(
-#     [
-#         [2],
-#         [3],
-#         [1],
-#     ]
-# )
-# types = ["L", "G", "L"]
-# print(LinearProgram(A, B, C, True, types).simplexSolver())
