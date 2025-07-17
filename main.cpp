@@ -24,8 +24,13 @@ std::ostream &operator<<(std::ostream &os, const std::vector<T> &v) {
   return os;
 }
 
-// Convert 2D numpy array of doubles to Eigen::Matrix<mpreal, ...>
-
+/**
+ * @brief Converts a 2D numpy array of doubles to an Eigen matrix of
+ * mpfr::mpreal
+ *
+ * @param input The input numpy array
+ * @returns An Eigen matrix of mpfr::mpreal
+ */
 MatrixXmp numpy_to_mpreal_matrix(py::array_t<double> input) {
   auto buf = input.unchecked<2>(); // 2D access
   MatrixXmp result(buf.shape(0), buf.shape(1));
@@ -37,7 +42,13 @@ MatrixXmp numpy_to_mpreal_matrix(py::array_t<double> input) {
   return result;
 }
 
-// Convert 1D numpy array of doubles to Eigen::Matrix<mpreal, Dynamic, 1>
+/**
+ * @brief Converts a 1D numpy array of doubles to an Eigen vector of
+ * mpfr::mpreal
+ *
+ * @param input The input numpy array
+ * @returns An Eigen vector of mpfr::mpreal
+ */
 VectorXmp numpy_to_mpreal_vector(py::array_t<double> input) {
   auto buf = input.unchecked<1>(); // 1D access
   VectorXmp result(buf.shape(0));
@@ -51,7 +62,7 @@ class LP {
 
 public:
   /**
-   * Creates an Instance of a Linear Program maximizer
+   * Creates an Instance of a Linear Program solver
    *
    * @param A The n x m linear constraint matrix in the equation Ax <= b
    * @param B The n x 1 constraint vector in the equation Ax <= b
