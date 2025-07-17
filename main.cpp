@@ -72,6 +72,7 @@ public:
    */
   LP(MatrixXmp A, MatrixXmp B, MatrixXmp C, bool maxim,
      std::vector<std::string> constraint) {
+    m_maxim = maxim;
     m_constraints = constraint;
     m_permutation_matrix = MatrixXmp::Identity(A.rows() + 1, A.rows() + 1);
     m_a = A;
@@ -178,7 +179,8 @@ public:
       }
     }
 
-    std::cout << "FINAL RESULT: " << m_c.transpose() * output << std::endl;
+    std::cout << "FINAL RESULT: "
+              << (m_c.transpose() * output) * (m_maxim ? -1 : 1) << std::endl;
     std::cout << "FINAL ASSIGNMENT: \n" << output << std::endl;
     return refine_solution();
     // return output;
@@ -201,6 +203,7 @@ private:
   int64_t m_num_artificial;
   std::vector<std::string> types;
   int m_num_variables;
+  bool m_maxim;
 
   /**
    * Builds the initial tableau for phase one of the simplex algorithm
