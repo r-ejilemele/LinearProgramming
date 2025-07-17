@@ -169,8 +169,8 @@ public:
 
     std::cout << "FINAL RESULT: " << m_c.transpose() * output << std::endl;
     std::cout << "FINAL ASSIGNMENT: \n" << output << std::endl;
-    // refine_solution();
-    return output;
+    return refine_solution();
+    // return output;
   }
 
 private:
@@ -338,7 +338,7 @@ private:
    * feasible and optimal
    *
    */
-  void refine_solution() {
+  VectorXmp refine_solution() {
     int size = m_a.rows() + m_a.cols();
     MatrixXmp temp = m_Ca;
     MatrixXmp Identity = MatrixXmp::Identity(m_Ca.rows(), m_Ca.rows());
@@ -364,11 +364,12 @@ private:
 
     MatrixXmp residual = b - A * z;
 
-    while (residual.norm() > 1e1) {
+    while (residual.norm() > 1e-10) {
       MatrixXmp c = A.colPivHouseholderQr().solve(residual);
       z += c;
       residual = b - A * z;
     }
+    return z.head(m_num_variables);
   }
   VectorXmp m_make_vector_with_one_non_zero_elem(Eigen::Index position,
                                                  double value, int64_t size) {
