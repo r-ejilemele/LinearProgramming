@@ -6,7 +6,6 @@ using HighPrecision = mpfr::mpreal;
 using MatrixXmp = Eigen::Matrix<HighPrecision, Eigen::Dynamic, Eigen::Dynamic>;
 using VectorXmp = Eigen::Matrix<mpfr::mpreal, Eigen::Dynamic, 1>;
 using ArrayXmp = Eigen::Array<mpfr::mpreal, Eigen::Dynamic, 1>;
-using Eigen::placeholders::last;
 namespace py = pybind11;
 
 float some_fn(float arg1, float arg2) { return arg1 + arg2; }
@@ -137,8 +136,9 @@ public:
 
     // Stopping condition: No negative elements in last row
     bool exists_negative_in_last_row =
-        (m_table(m_table.rows() - 1, Eigen::seq(0, last - 1)).array() <
-         -TOLERANCE)
+        (m_table(m_table.rows() - 1,
+                 Eigen::seq(0, Eigen::placeholders::last - 1))
+             .array() < -TOLERANCE)
             .any();
     int counter = 0;
     while (exists_negative_in_last_row) {
@@ -150,8 +150,9 @@ public:
       m_pivot(pivot_row, pivot_column, m_table);
 
       exists_negative_in_last_row =
-          (m_table(m_table.rows() - 1, Eigen::seq(0, last - 1)).array() <
-           -TOLERANCE)
+          (m_table(m_table.rows() - 1,
+                   Eigen::seq(0, Eigen::placeholders::last - 1))
+               .array() < -TOLERANCE)
               .any();
       counter++;
     }
@@ -300,7 +301,7 @@ private:
 
       exists_negative_in_last_row =
           (m_phase_one_table(m_phase_one_table.rows() - 1,
-                             Eigen::seq(0, last - 1))
+                             Eigen::seq(0, Eigen::placeholders::last - 1))
                .array() < -TOLERANCE)
               .any();
     }

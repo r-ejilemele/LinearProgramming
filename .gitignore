@@ -5,3 +5,7 @@
 out.txt
 linear.cp313-win_amd64.pyd
 /__pycache__
+linear.cp313-win_amd64.ilk
+linear.pdb
+/out
+/.vs
