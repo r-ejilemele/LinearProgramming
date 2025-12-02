@@ -6,7 +6,7 @@ from highspy import Highs
 import highspy
 import sys
 
-save_dir = "test/numpy"
+save_dir = r"C:\Users\rejil\Documents\GitHub\LinearProgramming\tests\data\numpy"
 __all__ = ["load_linear_program"]
 
 

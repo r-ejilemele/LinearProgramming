@@ -2,8 +2,7 @@
 
 #define TOLERANCE 1e-100
 
-using HighPrecision = mpfr::mpreal;
-using MatrixXmp = Eigen::Matrix<HighPrecision, Eigen::Dynamic, Eigen::Dynamic>;
+using MatrixXmp = Eigen::Matrix<mpfr::mpreal, Eigen::Dynamic, Eigen::Dynamic>;
 using VectorXmp = Eigen::Matrix<mpfr::mpreal, Eigen::Dynamic, 1>;
 using ArrayXmp = Eigen::Array<mpfr::mpreal, Eigen::Dynamic, 1>;
 namespace py = pybind11;
@@ -612,7 +611,7 @@ private:
 
 PYBIND11_MODULE(linear, handle) {
   mpfr::mpreal::set_default_prec(128);
-  handle.doc() = "This is the doc";
+  handle.doc() = "Linear Program Solver";
   py::class_<LP>(handle, "LinearProgram")
       .def(py::init([](py::array_t<double> A_np, py::array_t<double> b_np,
                        py::array_t<double> C_np, bool flag,
