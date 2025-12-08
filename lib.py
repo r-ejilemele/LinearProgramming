@@ -1,10 +1,5 @@
-from json import load
-from pulp import const
 from linear import *
 import numpy as np
-from highspy import Highs
-import highspy
-import sys
 
 save_dir = r"C:\Users\rejil\Documents\GitHub\LinearProgramming\tests\data\numpy"
 __all__ = ["load_linear_program"]
@@ -116,7 +111,6 @@ def load_numpy_file(file_path):
 
 
 def parse_mps_to_standard_form(mps_path):
-    from pysmps import smps_loader as smps
     import os
 
     A, B, C, types = parse_mps_pulp(mps_path)
